@@ -20,6 +20,18 @@ def take_gas():
         return(timed_gas * 1.34)
 
 
+def amount_swapped(hash):
+    try:
+        tx_json = json.loads(web3.toJSON(web3.eth.getTransactionReceipt(hash)))
+        timed_amount = int(tx_json['logs'][-3]['data'].removeprefix('0x'), 16)
+        if timed_amount >= 1000000000000:
+            swapped_amount = round((float(web3.fromWei((timed_amount), 'ether'))), 2)
+        else:
+            swapped_amount = str(timed_amount) + ' smt wrong'
+        return(swapped_amount)
+    except Exception as error:
+        return(error)
+
 def wait_for_tx(hash, a):
     try:
         sta = json.loads(web3.toJSON(web3.eth.getTransactionReceipt(hash)))['status']
@@ -28,11 +40,11 @@ def wait_for_tx(hash, a):
             a = a + 1
             logger.info(f'NOTHING HAPPENS. STA {sta}')
         if (sta == 1):
-            logger.opt(colors=True).success(f'TX <green>SUBMITTED</green>!!!\nhttps://bscscan.com/tx/{hash}')
+            logger.opt(colors=True).info(f'TX <green>SUBMITTED</green>: https://bscscan.com/tx/{hash}')
         elif sta == 0:
-            logger.opt(colors=True).error(f'</red>TX FAILED</red>!!!\nhttps://bscscan.com/tx/{hash}')
+            logger.opt(colors=True).error(f'<red>TX FAILED</red>!!! https://bscscan.com/tx/{hash}')
         else:
-            logger.opt(colors=True).error(f'</red>SOMETHING WRONG NEED YOUR HELP</red>!!!\nhttps://bscscan.com/tx/{hash}')
+            logger.opt(colors=True).error(f'<red>SOMETHING WRONG NEED YOUR HELP</red>!!! https://bscscan.com/tx/{hash}')
     except TransactionNotFound:
         wait_for_tx(hash, a+1)
     except Exception as error:
@@ -56,7 +68,7 @@ def claim_impossible(ps):
             else:
                 claim_impossible(ps + 1)
         else:
-            logger.success(f'good error is {str(error)}\nCan claim, sending tx...')
+            logger.info(f'good error is {str(error)}\nCan claim, sending tx...')
             claim_tx = wormhole_contract.functions.withdraw().buildTransaction({
                 'from': main_acc,
                 'value': 0,
@@ -118,21 +130,17 @@ abi_cake = [{"inputs":[{"internalType":"address","name":"_factory","type":"addre
 pancake_contract = web3.eth.contract(address=cake_contract, abi=abi_cake)
 
 claim_hash = claim_impossible(0)
-logger.opt(colors=True).success(f'CLAIM tx send: https://bscscan.com/tx/{claim_hash}')
+logger.opt(colors=True).info(f'CLAIM tx send: https://bscscan.com/tx/{claim_hash}')
 wait_for_tx(claim_hash, 0)
 
 
 #################################################### CHECK BALANCE ####################################################
 balanceOfacc = aura_contract.functions.balanceOf(main_acc).call()
-withdrawerCount = wormhole_contract.functions.withdrawerCount().call()
 while balanceOfacc == 0:
     logger.opt(colors=True).info(f'Balance is <red>zero</red>. Waiting...')
     balanceOfacc = aura_contract.functions.balanceOf(main_acc).call()
-    withdrawerCount = wormhole_contract.functions.withdrawerCount().call()
 
-logger.opt(colors=True).success(f'BALANCE CHANGED - {web3.fromWei(balanceOfacc, "ether")} AURA\nWithdrawerCount - {withdrawerCount}')
-
-
+logger.opt(colors=True).info(f'BALANCE CHANGED - {web3.fromWei(balanceOfacc, "ether")} AURA')
 ############################################################### TX ###################################################
 swap_tx = pancake_contract.functions.swapExactTokensForTokens(int(balanceOfacc*0.9991), int(balanceOfacc*0.045), [aura, busd], main_acc, int(time.time())+500).buildTransaction({
     'from': main_acc,
@@ -147,11 +155,11 @@ swap_tx.update({'gas': int(updated_gas*2.1)})
 sign_tx = web3.eth.account.sign_transaction(swap_tx,private_key)
 send_tx = web3.eth.send_raw_transaction(sign_tx.rawTransaction)
 tx_hash = web3.toHex(send_tx)
-
 ######################################################################################################################
+logger.opt(colors=True).info(f'<blue>WithdrawerCount</blue> - {wormhole_contract.functions.withdrawerCount().call()}')
 
-logger.opt(colors=True).success(f'SWAP tx send: https://bscscan.com/tx/{tx_hash}')
+logger.opt(colors=True).info(f'SWAP tx send: https://bscscan.com/tx/{tx_hash}')
 wait_for_tx(tx_hash, 0)
-logger.opt(colors = True).info('<green>SWAPPED</green>')
-
-input('Press ENTER to exit')
+logger.opt(colors=True).success(f'SWAPPED FOR <green>{amount_swapped(tx_hash)}</green> BUSD')
+time.sleep(1)
+input('\nPress ENTER to exit...')
